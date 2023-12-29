@@ -1125,6 +1125,7 @@
 
 <script>
   import pick from 'lodash.pick'
+  import { axios } from '@/utils/request'
   import { getAction, postAction, getFileAccessHttpUrl } from '@/api/manage'
   import { findBillDetailByNumber, findFinancialDetailByNumber, getPlatformConfigByKey, getCurrentSystemConfig} from '@/api/api'
   import { getMpListShort, getCheckFlag, openDownloadDialog, sheet2blob } from "@/utils/util"
@@ -1148,7 +1149,7 @@
         model: {},
         isCanBackCheck: true,
         billType: '',
-        billPrintFlag: false,
+        billPrintFlag: true,
         fileList: [],
         purchaseBySaleFlag: false,
         linkNumberList: [],
@@ -1729,10 +1730,10 @@
       handlePrint() {
         getPlatformConfigByKey({"platformKey": "bill_print_url"}).then((res)=> {
           if (res && res.code === 200) {
-            let billPrintUrl = res.data.platformValue + '?no=' + this.model.number
-            let billPrintHeight = this.dataSource.length*50 + 600
-            this.$refs.modalDetail.show(this.model, billPrintUrl, billPrintHeight)
-            this.$refs.modalDetail.title = this.billType + "-三联打印预览"
+            let json = this.orderExportJson()
+            let url = '/jshERP-boot/printPreview/pdf/'+ this.model.number
+            json.push([this.model.number, this.billType]) 
+            axios.post('/printPreview/bill', json).then(res=> window.open(url, '_blank', 'title='+this.model.number))
           }
         })
       },
@@ -1772,6 +1773,29 @@
           aoa.push(item)
         }
         openDownloadDialog(sheet2blob(aoa), this.billType + '_' + this.model.number)
+      },
+      orderExportJson() {
+        let aoa = []
+        let finishType = ''
+        let organType = ''
+        if(this.billType === '采购订单') {
+          finishType = '已入库'
+          organType = '供应商：'
+        } else if(this.billType === '销售订单') {
+          finishType = '已出库'
+          organType = '客户：'
+        }
+        aoa = [[organType, this.model.organName, '', '单据日期：', this.model.operTimeStr, '', '单据编号：', this.model.number],[]]
+        let title = ['条码', '名称', '规格', '型号', '颜色', '扩展信息', '库存', '单位', '多属性', '数量', finishType, '单价', '金额', '税率(%)', '税额', '价税合计', '备注']
+        aoa.push(title)
+        for (let i = 0; i < this.dataSource.length; i++) {
+          let ds = this.dataSource[i]
+          let item = [ds.barCode, ds.name, ds.standard, ds.model, ds.color, ds.materialOther, ds.stock, ds.unit, ds.sku,
+            ds.operNumber, ds.finishNumber, ds.unitPrice, ds.allPrice, ds.taxRate, ds.taxMoney, ds.taxLastMoney, ds.remark]
+          aoa.push(item)
+        }
+        aoa.push([this.model.discount, this.model.discountMoney, this.model.discountLastMoney, this.model.accountName, this.model.changeAmount])
+        return aoa;
       },
       //采购入库|采购退货出库|销售出库|销售退货入库
       purchaseSaleExportExcel() {
